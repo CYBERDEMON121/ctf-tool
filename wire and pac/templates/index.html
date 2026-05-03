@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CTF DEMON — Network Analysis Tool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;400;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+/* ═══════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════ */
+:root {
+  --bg:        #020204;
+  --bg2:       #06060c;
+  --bg3:       #0c0c16;
+  --panel:     #0a0a12;
+  --border:    #1a0a0a;
+  --red:       #cc0000;
+  --red-bright:#ff1111;
+  --red-dim:   #660000;
+  --red-glow:  rgba(204,0,0,0.25);
+  --crimson:   #8b0000;
+  --amber:     #ff6600;
+  --green:     #00cc44;
+  --cyan:      #0099cc;
+  --text:      #c8c8d8;
+  --text-dim:  #606070;
+  --text-red:  #ff4444;
+  --mono:      'Share Tech Mono', monospace;
+  --display:   'Orbitron', sans-serif;
+  --ui:        'Rajdhani', sans-serif;
+}
+
+/* ═══════════════════════════════════════
+   RESET + BASE
+═══════════════════════════════════════ */
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--ui);
+  font-size:14px;
+  line-height:1.5;
+}
+
+/* Scanline overlay */
+body::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  background:repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.15) 2px,
+    rgba(0,0,0,0.15) 4px
+  );
+  pointer-events:none;
+  z-index:9999;
+}
+
+/* Vignette */
+body::after{
+  content:'';
+  position:fixed;
+  inset:0;
+  background:radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%);
+  pointer-events:none;
+  z-index:9998;
+}
+
+/* ═══════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════ */
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+
+/* ── Header ── */
+header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:10px 20px;
+  background:linear-gradient(90deg, #0a0000, #080010, #0a0000);
+  border-bottom:1px solid var(--red);
+  box-shadow:0 0 20px var(--red-glow), inset 0 -1px 0 var(--crimson);
+  flex-shrink:0;
+  position:relative;
+}
+header::after{
+  content:'';
+  position:absolute;
+  bottom:-4px;
+  left:0;right:0;height:3px;
+  background:linear-gradient(90deg, transparent, var(--red), transparent);
+  opacity:0.4;
+}
+
+.logo{
+  font-family:var(--display);
+  font-size:20px;
+  font-weight:900;
+  color:var(--red-bright);
+  text-shadow:0 0 20px var(--red), 0 0 40px rgba(200,0,0,0.4);
+  letter-spacing:4px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.logo-icon{font-size:24px;animation:pulse 2s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1;filter:drop-shadow(0 0 6px var(--red));}50%{opacity:.6;filter:none;}}
+
+.header-stats{display:flex;gap:16px;align-items:center;}
+.stat-badge{
+  font-family:var(--mono);
+  font-size:11px;
+  padding:3px 10px;
+  border:1px solid var(--red-dim);
+  background:rgba(200,0,0,0.08);
+  color:var(--text-red);
+  letter-spacing:1px;
+}
+.stat-badge span{color:var(--red-bright);font-weight:700;}
+
+.status-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--text-dim);
+  box-shadow:none;
+  transition:all .3s;
+  display:inline-block;
+}
+.status-dot.active{background:var(--green);box-shadow:0 0 8px var(--green);}
+.status-dot.running{background:var(--amber);box-shadow:0 0 8px var(--amber);animation:blink .8s step-end infinite;}
+@keyframes blink{50%{opacity:0;}}
+
+/* ── Main ── */
+main{display:flex;flex:1;overflow:hidden;}
+
+/* ── Sidebar ── */
+sidebar{
+  width:280px;flex-shrink:0;
+  background:var(--panel);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+
+/* ── Content area ── */
+#content{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  background:var(--bg2);
+}
+
+/* ── Tab bar ── */
+.tabs{
+  display:flex;
+  border-bottom:1px solid var(--border);
+  background:var(--bg);
+  flex-shrink:0;
+}
+.tab{
+  padding:10px 20px;
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:1px;
+  color:var(--text-dim);
+  cursor:pointer;
+  border-bottom:2px solid transparent;
+  transition:all .2s;
+  white-space:nowrap;
+  text-transform:uppercase;
+}
+.tab:hover{color:var(--text);background:rgba(200,0,0,0.05);}
+.tab.active{color:var(--red-bright);border-bottom-color:var(--red);background:rgba(200,0,0,0.08);}
+
+/* ── Tab panels ── */
+.tab-panel{display:none;flex:1;overflow:auto;padding:16px;}
+.tab-panel.active{display:flex;flex-direction:column;gap:12px;}
+
+/* ═══════════════════════════════════════
+   PANELS / CARDS
+═══════════════════════════════════════ */
+.card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-left:3px solid var(--red-dim);
+  padding:14px;
+}
+.card-title{
+  font-family:var(--display);
+  font-size:11px;
+  letter-spacing:3px;
+  color:var(--red);
+  text-transform:uppercase;
+  margin-bottom:10px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.card-title::after{
+  content:'';
+  flex:1;height:1px;
+  background:linear-gradient(90deg,var(--red-dim),transparent);
+}
+
+/* ═══════════════════════════════════════
+   SIDEBAR — CONFIG FORM
+═══════════════════════════════════════ */
+.sidebar-section{
+  padding:14px;
+  border-bottom:1px solid var(--border);
+}
+.sidebar-title{
+  font-family:var(--display);
+  font-size:10px;
+  letter-spacing:3px;
+  color:var(--red-dim);
+  text-transform:uppercase;
+  margin-bottom:10px;
+}
+
+label{
+  display:block;
+  font-size:11px;
+  color:var(--text-dim);
+  letter-spacing:1px;
+  text-transform:uppercase;
+  margin-bottom:4px;
+  margin-top:8px;
+}
+input,select,textarea{
+  width:100%;
+  background:#06060e;
+  border:1px solid #1a0a0a;
+  border-top-color:#2a0a0a;
+  color:var(--text);
+  font-family:var(--mono);
+  font-size:12px;
+  padding:7px 10px;
+  outline:none;
+  transition:border-color .2s, box-shadow .2s;
+}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--red-dim);
+  box-shadow:0 0 0 1px var(--red-dim), inset 0 0 10px rgba(200,0,0,0.05);
+}
+textarea{resize:vertical;min-height:70px;line-height:1.4;}
+.check-row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:8px;
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--text-dim);
+  text-transform:uppercase;
+  letter-spacing:1px;
+}
+.check-row input{
+  width:auto;
+  accent-color:var(--red);
+}
+
+/* ═══════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════ */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  font-family:var(--display);
+  font-size:11px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  padding:8px 16px;
+  cursor:pointer;
+  border:1px solid;
+  transition:all .2s;
+  white-space:nowrap;
+}
+.btn-red{
+  background:rgba(180,0,0,0.15);
+  border-color:var(--red-dim);
+  color:var(--red-bright);
+}
+.btn-red:hover{
+  background:rgba(200,0,0,0.3);
+  border-color:var(--red);
+  box-shadow:0 0 12px var(--red-glow);
+}
+.btn-ghost{
+  background:transparent;
+  border-color:#333;
+  color:var(--text-dim);
+}
+.btn-ghost:hover{border-color:var(--red-dim);color:var(--text);}
+.btn-full{width:100%;margin-top:8px;}
+.btn-sm{padding:5px 10px;font-size:10px;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* ═══════════════════════════════════════
+   TABLES
+═══════════════════════════════════════ */
+.data-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;}
+.data-table th{
+  text-align:left;padding:6px 10px;
+  font-family:var(--display);font-size:10px;letter-spacing:2px;
+  color:var(--red-dim);border-bottom:1px solid #1a0808;
+  background:rgba(200,0,0,0.05);
+  white-space:nowrap;
+}
+.data-table td{
+  padding:5px 10px;border-bottom:1px solid #0a0608;
+  vertical-align:middle;
+  max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.data-table tr:hover td{background:rgba(200,0,0,0.06);}
+.table-wrap{overflow:auto;max-height:350px;}
+
+/* Status badges */
+.badge{
+  display:inline-block;padding:1px 6px;
+  font-size:10px;font-family:var(--mono);
+  border:1px solid;
+}
+.badge-200{border-color:#006600;color:#00cc44;background:rgba(0,100,0,.15);}
+.badge-301,.badge-302{border-color:#665500;color:#ffaa00;background:rgba(100,80,0,.15);}
+.badge-403,.badge-401{border-color:#660000;color:#ff4444;background:rgba(100,0,0,.15);}
+.badge-500{border-color:#440044;color:#cc44cc;background:rgba(60,0,60,.15);}
+.badge-other{border-color:#333;color:#888;}
+
+/* ═══════════════════════════════════════
+   PACKET VIEWER
+═══════════════════════════════════════ */
+.packet-row{cursor:pointer;}
+.packet-detail{
+  background:#030308;
+  border:1px solid var(--border);
+  padding:12px;
+  font-family:var(--mono);
+  font-size:11px;
+  line-height:1.6;
+  white-space:pre-wrap;
+  word-break:break-all;
+  color:var(--text);
+  max-height:200px;
+  overflow:auto;
+  margin-top:8px;
+}
+
+/* ═══════════════════════════════════════
+   PCAP ANALYZER
+═══════════════════════════════════════ */
+.pcap-grid{
+  display:grid;
+  grid-template-columns:repeat(4, minmax(120px, 1fr));
+  gap:10px;
+}
+.pcap-metric{
+  background:#030308;
+  border:1px solid var(--border);
+  padding:12px;
+}
+.pcap-metric strong{
+  display:block;
+  font-family:var(--display);
+  font-size:24px;
+  color:var(--cyan);
+}
+.pcap-metric span{
+  font-family:var(--mono);
+  font-size:10px;
+  color:var(--text-dim);
+  letter-spacing:1px;
+  text-transform:uppercase;
+}
+.pcap-list{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(0, 1fr));
+  gap:10px;
+}
+.pcap-pill{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  border:1px solid #1a0a0a;
+  background:#030308;
+  padding:6px 8px;
+  font-family:var(--mono);
+  font-size:11px;
+}
+.pcap-pill code{
+  color:var(--text);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.pcap-pill span{color:var(--amber);flex-shrink:0;}
+.pcap-indicator{
+  border-color:var(--amber);
+  background:rgba(255,100,0,.08);
+}
+.pcap-results-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.string-copy-btn{
+  border:1px solid #333;
+  background:transparent;
+  color:var(--text-dim);
+  font-family:var(--mono);
+  font-size:10px;
+  padding:3px 7px;
+  cursor:pointer;
+}
+.string-copy-btn:hover{
+  border-color:var(--amber);
+  color:var(--amber);
+}
+
+/* ═══════════════════════════════════════
+   DECODER PANEL
+═══════════════════════════════════════ */
+.decoder-input{
+  display:flex;gap:8px;align-items:flex-start;
+}
+.decoder-input textarea{flex:1;}
+
+.layer-card{
+  border:1px solid var(--border);
+  border-left:3px solid var(--cyan);
+  background:#03030a;
+  padding:10px 12px;
+  margin-bottom:6px;
+}
+.layer-header{
+  display:flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:11px;
+  margin-bottom:6px;
+}
+.layer-num{
+  background:var(--red);color:#000;
+  width:18px;height:18px;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;flex-shrink:0;
+}
+.encoding-tag{
+  border:1px solid var(--cyan);color:var(--cyan);
+  padding:1px 6px;font-size:10px;
+  background:rgba(0,150,200,.1);
+}
+.meaningful-tag{
+  border:1px solid var(--green);color:var(--green);
+  padding:1px 6px;font-size:10px;
+  background:rgba(0,180,60,.1);
+}
+.flag-inline{
+  border:1px solid var(--amber);color:var(--amber);
+  padding:1px 6px;font-size:10px;
+  background:rgba(255,100,0,.1);
+}
+.layer-io{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  font-family:var(--mono);font-size:11px;
+}
+.layer-io-block{background:var(--bg);padding:6px 8px;border:1px solid #111;}
+.layer-io-label{font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:3px;}
+.layer-io-text{color:var(--text);word-break:break-all;}
+
+/* ═══════════════════════════════════════
+   FLAGS DASHBOARD
+═══════════════════════════════════════ */
+.flag-card{
+  display:flex;align-items:center;gap:12px;
+  background:linear-gradient(135deg, rgba(200,0,0,.1), rgba(100,0,0,.05));
+  border:1px solid var(--red-dim);
+  border-left:4px solid var(--red-bright);
+  padding:10px 14px;
+  animation:flagIn .4s ease-out;
+}
+@keyframes flagIn{
+  from{opacity:0;transform:translateX(-10px);}
+  to{opacity:1;transform:translateX(0);}
+}
+.flag-icon{color:var(--red-bright);font-size:20px;}
+.flag-text{
+  font-family:var(--mono);font-size:13px;color:var(--amber);
+  letter-spacing:1px;font-weight:700;
+}
+.flag-meta{font-size:11px;color:var(--text-dim);}
+.flag-copy{
+  margin-left:auto;cursor:pointer;
+  font-size:11px;color:var(--text-dim);
+  border:1px solid #333;padding:3px 8px;
+  transition:all .2s;background:transparent;
+}
+.flag-copy:hover{border-color:var(--amber);color:var(--amber);}
+
+/* ═══════════════════════════════════════
+   LOG / CONSOLE
+═══════════════════════════════════════ */
+.console-log{
+  font-family:var(--mono);font-size:11px;
+  background:#02020a;
+  border:1px solid var(--border);
+  padding:10px;
+  height:180px;
+  overflow-y:auto;
+  display:flex;flex-direction:column-reverse;
+}
+.log-line{
+  padding:1px 0;
+  display:flex;gap:8px;
+}
+.log-time{color:var(--text-dim);flex-shrink:0;}
+.log-lvl-info{color:var(--cyan);}
+.log-lvl-ok{color:var(--green);}
+.log-lvl-warn{color:var(--amber);}
+.log-lvl-err{color:var(--red-bright);}
+.log-lvl-flag{color:var(--amber);font-weight:700;}
+
+/* ═══════════════════════════════════════
+   REQUEST EDITOR
+═══════════════════════════════════════ */
+.req-editor-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.req-panel{display:flex;flex-direction:column;gap:6px;}
+.req-panel label{margin-top:0;}
+
+/* ═══════════════════════════════════════
+   EMPTY STATES
+═══════════════════════════════════════ */
+.empty{
+  text-align:center;padding:40px;
+  color:var(--text-dim);font-family:var(--mono);font-size:12px;
+}
+.empty-icon{font-size:32px;margin-bottom:8px;opacity:.3;}
+
+/* ═══════════════════════════════════════
+   SCROLLBARS
+═══════════════════════════════════════ */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:#030308;}
+::-webkit-scrollbar-thumb{background:var(--red-dim);}
+::-webkit-scrollbar-thumb:hover{background:var(--red);}
+
+/* ═══════════════════════════════════════
+   SIDEBAR FLAGS
+═══════════════════════════════════════ */
+#sidebar-flags{
+  flex:1;overflow-y:auto;
+  padding:10px;
+  display:flex;flex-direction:column;gap:4px;
+}
+.mini-flag{
+  background:rgba(200,0,0,.12);
+  border:1px solid var(--red-dim);
+  padding:5px 8px;
+  font-family:var(--mono);font-size:10px;
+  color:var(--amber);
+  animation:flagIn .3s;
+}
+
+/* ═══════════════════════════════════════
+   PROGRESS
+═══════════════════════════════════════ */
+.progress-bar{
+  height:3px;background:#0a0010;
+  border:1px solid var(--border);
+  margin-top:4px;overflow:hidden;
+}
+.progress-fill{
+  height:100%;background:var(--red);width:0%;
+  transition:width .5s;
+  box-shadow:0 0 8px var(--red);
+}
+
+/* ═══════════════════════════════════════
+   GLOW TEXT
+═══════════════════════════════════════ */
+.glow-red{text-shadow:0 0 8px var(--red),0 0 20px rgba(200,0,0,.4);}
+.glow-amber{text-shadow:0 0 8px var(--amber);}
+.glow-green{text-shadow:0 0 8px var(--green);}
+
+.live-indicator{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:10px;color:var(--text-dim);
+}
+.live-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--text-dim);
+}
+.live-dot.live{
+  background:var(--red-bright);
+  box-shadow:0 0 6px var(--red-bright);
+  animation:blink .8s step-end infinite;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ═══════════════════════ HEADER ═══════════════════════ -->
+  <header>
+    <div class="logo">
+      <span class="logo-icon">☠</span>
+      CTF DEMON
+      <span style="font-size:11px;color:var(--red-dim);letter-spacing:2px;font-weight:400;">// NETWORK EXPLOITATION</span>
+    </div>
+    <div class="header-stats">
+      <div class="live-indicator">
+        <span class="live-dot" id="live-dot"></span>
+        <span id="live-label">STANDBY</span>
+      </div>
+      <div class="stat-badge">PKTS <span id="stat-pkts">0</span></div>
+      <div class="stat-badge">FUZZ <span id="stat-fuzz">0</span></div>
+      <div class="stat-badge">FLAGS <span id="stat-flags">0</span></div>
+      <div class="stat-badge">DECODE <span id="stat-decode">0</span></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+    <sidebar>
+      <!-- Config -->
+      <div class="sidebar-section">
+        <div class="sidebar-title">⚙ Target Config</div>
+        <label>Target URL</label>
+        <input id="cfg-target" type="text" placeholder="http://target.local" value="http://localhost:8080"/>
+        <label>Flag Regex</label>
+        <input id="cfg-regex" type="text" placeholder="flag\{[^}]+\}" value="flag\{[^}]+\}"/>
+        <label class="check-row"><input id="cfg-brace-flags" type="checkbox"/> Treat {text} as flag</label>
+        <label>Interface</label>
+        <input id="cfg-iface" type="text" placeholder="any" value="any"/>
+        <label>Capture Duration (s)</label>
+        <input id="cfg-duration" type="number" value="30" min="5" max="300"/>
+        <button class="btn btn-red btn-full" id="btn-launch">
+          ☠ LAUNCH WORKFLOW
+        </button>
+        <button class="btn btn-ghost btn-full btn-sm" id="btn-stop">■ STOP</button>
+      </div>
+
+      <!-- Quick decode -->
+      <div class="sidebar-section">
+        <div class="sidebar-title">⟳ Quick Decode</div>
+        <textarea id="quick-decode-in" rows="3" placeholder="Paste encoded string…"></textarea>
+        <button class="btn btn-ghost btn-full btn-sm" id="btn-quick-decode">DECODE</button>
+        <div id="quick-decode-out" style="margin-top:6px;font-family:var(--mono);font-size:11px;color:var(--amber);word-break:break-all;max-height:80px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- Sidebar flags -->
+      <div class="sidebar-section" style="flex-shrink:0;">
+        <div class="sidebar-title">🚩 Captured Flags</div>
+      </div>
+      <div id="sidebar-flags">
+        <div class="empty" style="padding:20px;">
+          <div class="empty-icon">🏴</div>
+          No flags yet
+        </div>
+      </div>
+    </sidebar>
+
+    <!-- ═══════════════════════ CONTENT ═══════════════════════ -->
+    <div id="content">
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="dashboard">◈ Dashboard</div>
+        <div class="tab" data-tab="packets">⬡ Packets</div>
+        <div class="tab" data-tab="pcap">◫ PCAP</div>
+        <div class="tab" data-tab="fuzzer">⚡ Fuzzer</div>
+        <div class="tab" data-tab="decoder">⟳ Decoder</div>
+        <div class="tab" data-tab="flags">🚩 Flags</div>
+        <div class="tab" data-tab="reqeditor">✎ Request Editor</div>
+      </div>
+
+      <!-- ── Dashboard ── -->
+      <div class="tab-panel active" id="tab-dashboard">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+          <div class="card" style="text-align:center;padding:20px 14px;">
+            <div style="font-size:36px;color:var(--amber);font-family:var(--display);" id="db-flags">0</div>
+            <div style="font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:4px;">FLAGS FOUND</div>
+          </div>
+          <div class="card" style="text-align:center;padding:20px 14px;">
+            <div style="font-size:36px;color:var(--cyan);font-family:var(--display);" id="db-pkts">0</div>
+            <div style="font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:4px;">PACKETS</div>
+          </div>
+          <div class="card" style="text-align:center;padding:20px 14px;">
+            <div style="font-size:36px;color:var(--red-bright);font-family:var(--display);" id="db-fuzz">0</div>
+            <div style="font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:4px;">FUZZ HITS</div>
+          </div>
+          <div class="card" style="text-align:center;padding:20px 14px;">
+            <div style="font-size:36px;color:var(--green);font-family:var(--display);" id="db-decode">0</div>
+            <div style="font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:4px;">DECODES</div>
+          </div>
+        </div>
+
+        <!-- Console log -->
+        <div class="card" style="flex:1;">
+          <div class="card-title">📟 Daemon Console</div>
+          <div class="console-log" id="console-log">
+            <div class="log-line">
+              <span class="log-time">--:--:--</span>
+              <span class="log-lvl-info">SYS</span>
+              <span>CTF Demon initialized. Configure target and launch workflow.</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent flags -->
+        <div class="card">
+          <div class="card-title">🚩 Latest Flags</div>
+          <div id="db-flag-list">
+            <div class="empty"><div class="empty-icon">🏴</div>Awaiting capture…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Packets ── -->
+      <div class="tab-panel" id="tab-packets">
+        <div class="card" style="flex:1;display:flex;flex-direction:column;">
+          <div class="card-title" style="justify-content:space-between;margin-bottom:0;">
+            <span>⬡ Packet Capture</span>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-ghost btn-sm" id="btn-clear-pkts">CLEAR</button>
+              <button class="btn btn-red btn-sm" id="btn-start-cap">▶ CAPTURE</button>
+            </div>
+          </div>
+          <div style="margin-top:10px;" class="table-wrap" id="packet-table-wrap">
+            <table class="data-table" id="packet-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>Time</th><th>Src</th><th>Dst</th>
+                  <th>Proto</th><th>Len</th><th>Method</th><th>URI</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="packet-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" id="packet-detail-card" style="display:none;">
+          <div class="card-title">Packet Detail</div>
+          <pre class="packet-detail" id="packet-detail-content"></pre>
+        </div>
+      </div>
+
+      <!-- ── PCAP Analyzer ── -->
+      <div class="tab-panel" id="tab-pcap">
+        <div class="card">
+          <div class="card-title">◫ PCAP Analyzer</div>
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1fr auto;gap:10px;align-items:end;">
+            <div>
+              <label>Capture File</label>
+              <input id="pcap-file" type="file" accept=".pcap,.pcapng,.cap"/>
+            </div>
+            <div>
+              <label>Display Filter</label>
+              <input id="pcap-filter" type="text" placeholder="http or tcp.port == 80"/>
+            </div>
+            <div>
+              <label>String Search</label>
+              <input id="pcap-string-query" type="text" placeholder="flag, password, token"/>
+            </div>
+            <button class="btn btn-red" id="btn-pcap-analyze">ANALYZE</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Analysis Summary</div>
+          <div id="pcap-summary">
+            <div class="empty"><div class="empty-icon">◫</div>Upload a capture to map conversations, HTTP clues, decoded payloads, and flags.</div>
+          </div>
+        </div>
+
+        <div class="pcap-results-grid">
+          <div class="card">
+            <div class="card-title">Extracted Files</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Name</th><th>Size</th><th>Type</th><th>SHA256</th><th>Get</th></tr>
+                </thead>
+                <tbody id="pcap-files-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">String Search</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>#</th><th>String</th><th>Copy</th></tr>
+                </thead>
+                <tbody id="pcap-strings-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="flex:1;display:flex;flex-direction:column;">
+          <div class="card-title">Extracted Packets</div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>#</th><th>Time</th><th>Src</th><th>Dst</th>
+                  <th>Proto</th><th>Len</th><th>Method</th><th>URI</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="pcap-packet-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Fuzzer ── -->
+      <div class="tab-panel" id="tab-fuzzer">
+        <div class="card">
+          <div class="card-title">⚡ Gobuster Fuzzer Config</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+            <div>
+              <label>Target URL</label>
+              <input id="fuzz-target" type="text" placeholder="http://target.local"/>
+            </div>
+            <div>
+              <label>Threads</label>
+              <input id="fuzz-threads" type="number" value="40" min="1" max="200"/>
+            </div>
+            <div>
+              <label>Filter Codes (comma-sep)</label>
+              <input id="fuzz-filter" type="text" value="404,400"/>
+            </div>
+            <div>
+              <label>Wordlist Path</label>
+              <input id="fuzz-wordlist" type="text" placeholder="/usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt"/>
+            </div>
+            <div>
+              <label>Extensions (comma-sep)</label>
+              <input id="fuzz-extensions" type="text" placeholder="php,html,txt"/>
+            </div>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:8px;">
+            <button class="btn btn-red" id="btn-fuzz-start">⚡ START FUZZING</button>
+            <button class="btn btn-ghost btn-sm" id="btn-fuzz-clear">CLEAR</button>
+          </div>
+          <div class="progress-bar" style="margin-top:10px;"><div class="progress-fill" id="fuzz-progress"></div></div>
+        </div>
+        <div class="card" style="display:none;border-left:3px solid var(--cyan);background:rgba(0,150,200,0.05);" id="fuzz-cmd-card">
+          <div class="card-title" style="color:var(--cyan);">⚡ Command Executed</div>
+          <div style="position:relative;">
+            <pre style="background:#030308;border:2px solid var(--cyan);border-radius:3px;padding:12px;font-family:var(--mono);font-size:12px;color:var(--cyan);overflow-x:auto;max-height:140px;line-height:1.5;box-shadow:0 0 12px rgba(0,150,200,0.2);" id="fuzz-cmd-display"></pre>
+            <button class="btn btn-ghost btn-sm" id="btn-fuzz-copy-cmd" style="position:absolute;top:8px;right:8px;font-size:9px;">📋 COPY</button>
+          </div>
+        </div>
+        <div class="card" style="flex:1;display:flex;flex-direction:column;">
+          <div class="card-title">Results</div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Status</th><th>URL</th><th>Length</th>
+                  <th>Words</th><th>Lines</th><th>Type</th><th>Word</th>
+                </tr>
+              </thead>
+              <tbody id="fuzz-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Decoder ── -->
+      <div class="tab-panel" id="tab-decoder">
+        <div class="card">
+          <div class="card-title">⟳ Recursive Decoder</div>
+          <div class="decoder-input">
+            <textarea id="decode-input" rows="3" placeholder="Paste encoded data…"></textarea>
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              <button class="btn btn-red" id="btn-decode">DECODE</button>
+              <button class="btn btn-ghost btn-sm" id="btn-decode-clear">CLR</button>
+            </div>
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+            <label style="margin:0;width:auto;">Flag Regex:</label>
+            <input id="decode-regex" type="text" style="flex:1;" placeholder="flag\{[^}]+\}" value="flag\{[^}]+\}"/>
+            <label class="check-row" style="margin:0;"><input id="decode-brace-flags" type="checkbox"/> {text}</label>
+          </div>
+        </div>
+
+        <!-- Layers output -->
+        <div class="card" style="flex:1;">
+          <div class="card-title">Decoding Layers</div>
+          <div id="decode-layers">
+            <div class="empty"><div class="empty-icon">⟳</div>Waiting for input…</div>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="card">
+          <div class="card-title">Recent Decode History</div>
+          <div class="table-wrap" id="decode-history-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>Time</th><th>Source</th><th>Depth</th><th>Flags</th><th>Final (preview)</th></tr>
+              </thead>
+              <tbody id="decode-history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Flags ── -->
+      <div class="tab-panel" id="tab-flags">
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between;margin-bottom:0;">
+            <span>🚩 Flag Dashboard</span>
+            <button class="btn btn-ghost btn-sm" id="btn-clear-flags">CLEAR ALL</button>
+          </div>
+        </div>
+        <div id="flags-container" style="display:flex;flex-direction:column;gap:8px;flex:1;overflow-y:auto;">
+          <div class="empty" id="flags-empty">
+            <div class="empty-icon">🏴</div>No flags captured yet. Launch the workflow to begin.
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Request Editor ── -->
+      <div class="tab-panel" id="tab-reqeditor">
+        <div class="card">
+          <div class="card-title">✎ Manual Request Builder</div>
+          <div style="display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;margin-bottom:8px;">
+            <select id="req-method" style="width:90px;">
+              <option>GET</option><option>POST</option><option>PUT</option>
+              <option>DELETE</option><option>PATCH</option><option>HEAD</option>
+            </select>
+            <input id="req-url" type="text" placeholder="http://target.local/api/endpoint"/>
+            <button class="btn btn-red" id="btn-send-req">▶ SEND</button>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;overflow:hidden;">
+          <!-- Left: Request Input & Data Sent -->
+          <div style="display:flex;flex-direction:column;gap:12px;overflow:hidden;">
+            <div class="card req-panel">
+              <div class="card-title">Request</div>
+              <label>Headers (one per line: Key: Value)</label>
+              <textarea id="req-headers" rows="5" placeholder="Content-Type: application/json&#10;Authorization: Bearer token"></textarea>
+              <label>Body</label>
+              <textarea id="req-body" rows="6" placeholder='{"key":"value"}'></textarea>
+            </div>
+            <div class="card" style="border-left:3px solid var(--amber);background:rgba(255,100,0,0.05);">
+              <div class="card-title" style="color:var(--amber);">📤 Request Data Sent</div>
+              <div style="font-family:var(--mono);font-size:10px;color:var(--text-dim);overflow-y:auto;max-height:150px;">
+                <div id="req-data-display" style="white-space:pre-wrap;word-break:break-all;padding:8px;background:#030308;border:1px solid #1a0a0a;border-radius:3px;">
+                  <span style="color:var(--text-dim);">Awaiting request…</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Response -->
+          <div class="card req-panel" style="display:flex;flex-direction:column;gap:6px;overflow:hidden;">
+            <div class="card-title">Response</div>
+            <div style="display:flex;gap:8px;margin-bottom:6px;">
+              <span id="res-status" class="badge badge-other">---</span>
+              <span id="res-time" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
+              <button class="btn btn-ghost btn-sm" id="btn-decode-res" style="margin-left:auto;">⟳ DECODE</button>
+            </div>
+            <label>Command Executed</label>
+            <textarea id="res-cmd" rows="2" readonly style="color:var(--text-dim);font-size:10px;font-family:var(--mono);"></textarea>
+            <label>Headers</label>
+            <textarea id="res-headers" rows="3" readonly style="color:var(--text-dim);font-size:10px;"></textarea>
+            <label>Body</label>
+            <textarea id="res-body" rows="6" readonly style="flex:1;"></textarea>
+          </div>
+        </div>
+      </div>
+    </div><!-- /content -->
+  </main>
+</div>
+
+<script>
+/* ═══════════════════════════════════════
+   CTF DEMON — Frontend JS
+═══════════════════════════════════════ */
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// ── Tab switching ──
+$$('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    $$('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $(`#tab-${tab.dataset.tab}`).classList.add('active');
+  });
+});
+
+$('#cfg-brace-flags').addEventListener('change', () => {
+  $('#decode-brace-flags').checked = $('#cfg-brace-flags').checked;
+});
+
+$('#decode-brace-flags').addEventListener('change', () => {
+  $('#cfg-brace-flags').checked = $('#decode-brace-flags').checked;
+});
+
+// ── Console log ──
+function log(msg, level='info') {
+  const el = $('#console-log');
+  const now = new Date().toTimeString().slice(0,8);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${now}</span>`
+    + `<span class="log-lvl-${level}">${level.toUpperCase()}</span>`
+    + `<span>${escHtml(msg)}</span>`;
+  el.prepend(line);
+  // trim
+  while(el.children.length > 200) el.removeChild(el.lastChild);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function copyText(value, button) {
+  try {
+    await navigator.clipboard.writeText(value);
+  } catch(_) {
+    const area = document.createElement('textarea');
+    area.value = value;
+    area.style.position = 'fixed';
+    area.style.opacity = '0';
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    document.execCommand('copy');
+    area.remove();
+  }
+  if(button) {
+    const prior = button.textContent;
+    button.textContent = 'COPIED';
+    setTimeout(() => { button.textContent = prior; }, 900);
+  }
+}
+
+// ── Status badge helper ──
+function statusBadge(code) {
+  const cls = code >= 500 ? 'badge-500'
+    : code >= 400 ? (code===403||code===401?'badge-403':'badge-other')
+    : code >= 300 ? 'badge-301'
+    : code === 200 ? 'badge-200'
+    : 'badge-other';
+  return `<span class="badge ${cls}">${code}</span>`;
+}
+
+// ── SSE live feed ──
+let evtSource = null;
+function startSSE() {
+  if(evtSource) evtSource.close();
+  evtSource = new EventSource('/api/stream');
+  evtSource.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if(data.packets)  appendPackets(data.packets);
+    if(data.fuzz)     appendFuzz(data.fuzz);
+    if(data.flags)    appendFlags(data.flags);
+    if(data.decodes)  appendDecodes(data.decodes);
+  };
+  evtSource.onerror = () => {
+    $('#live-dot').classList.remove('live');
+    $('#live-label').textContent = 'OFFLINE';
+  };
+}
+
+// ── Stats refresh ──
+async function refreshStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const d = await r.json();
+    ['flags','pkts','fuzz','decode'].forEach((k,i) => {
+      const vals = [d.flags, d.packets, d.fuzz_results, d.decode_history];
+      $(`#stat-${k === 'pkts' ? 'pkts' : k}`).textContent = vals[i];
+      $(`#db-${k==='pkts'?'pkts':k==='decode'?'decode':k}`).textContent = vals[i];
+    });
+  } catch(_) {}
+}
+
+// ── Packet table ──
+let packetCount = 0;
+function appendPackets(pkts) {
+  const tbody = $('#packet-tbody');
+  pkts.forEach(p => {
+    packetCount++;
+    const tr = document.createElement('tr');
+    tr.className = 'packet-row';
+    tr.innerHTML = `
+      <td style="color:var(--text-dim)">${p.index}</td>
+      <td style="color:var(--text-dim);font-size:10px;">${(p.timestamp||'').slice(-12)}</td>
+      <td>${escHtml(p.src_ip)}</td>
+      <td>${escHtml(p.dst_ip)}</td>
+      <td><span style="color:var(--cyan);font-size:10px;">${escHtml(p.protocol)}</span></td>
+      <td style="color:var(--text-dim)">${p.length}</td>
+      <td><span style="color:var(--amber)">${escHtml(p.http_method)}</span></td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;">${escHtml(p.http_uri)}</td>
+      <td>${p.http_status ? statusBadge(parseInt(p.http_status)) : ''}</td>`;
+    tr.addEventListener('click', () => showPacketDetail(p));
+    tbody.prepend(tr);
+    if(tbody.children.length > 300) tbody.removeChild(tbody.lastChild);
+  });
+  log(`+${pkts.length} packets captured`, 'info');
+}
+
+function showPacketDetail(p) {
+  const card = $('#packet-detail-card');
+  card.style.display = 'block';
+  $('#packet-detail-content').textContent = JSON.stringify(p, null, 2);
+}
+
+function renderPcapSummary(payload) {
+  const summary = payload.summary || {};
+  const container = $('#pcap-summary');
+  const metric = (value, label) => `
+    <div class="pcap-metric">
+      <strong>${escHtml(value ?? 0)}</strong>
+      <span>${escHtml(label)}</span>
+    </div>`;
+  const list = (title, rows, indicator=false) => {
+    const items = rows && rows.length
+      ? rows.map(([name, count]) => `
+          <div class="pcap-pill ${indicator ? 'pcap-indicator' : ''}">
+            <code title="${escHtml(name)}">${escHtml(name)}</code>
+            <span>${escHtml(count)}</span>
+          </div>`).join('')
+      : '<div class="empty" style="padding:20px;">none</div>';
+    return `<div><div class="card-title" style="font-size:10px;">${escHtml(title)}</div>${items}</div>`;
+  };
+
+  container.innerHTML = `
+    <div class="pcap-grid">
+      ${metric(summary.packet_count, 'Packets')}
+      ${metric(summary.http_packets, 'HTTP Packets')}
+      ${metric(summary.total_bytes, 'Bytes')}
+      ${metric(summary.decoded_bodies, 'Decoded Bodies')}
+      ${metric(summary.extracted_files, 'Files')}
+      ${metric(summary.strings, 'Strings')}
+    </div>
+    <div class="pcap-list" style="margin-top:12px;">
+      ${list('Top Conversations', summary.top_conversations)}
+      ${list('Top Endpoints', summary.top_endpoints)}
+      ${list('HTTP Statuses', summary.statuses)}
+      ${list('Indicators', summary.indicators, true)}
+    </div>`;
+
+  if(summary.flags?.length) {
+    const flagBlock = document.createElement('div');
+    flagBlock.style.marginTop = '12px';
+    flagBlock.innerHTML = `<div class="card-title" style="font-size:10px;">Flags</div>`
+      + summary.flags.map(f => `<div class="flag-card"><span class="flag-icon">🚩</span><div class="flag-text">${escHtml(f)}</div></div>`).join('');
+    container.appendChild(flagBlock);
+  }
+
+  if(payload.error) {
+    log(`PCAP analyzer warning: ${payload.error}`, 'warn');
+  }
+}
+
+function renderPcapFiles(files) {
+  const tbody = $('#pcap-files-tbody');
+  tbody.innerHTML = '';
+  if(!files?.length) {
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);">No files exported from this capture.</td></tr>';
+    return;
+  }
+
+  files.forEach(file => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td title="${escHtml(file.relative_path)}">${escHtml(file.name)}</td>
+      <td>${escHtml(file.size)}</td>
+      <td style="font-size:10px;color:var(--text-dim);">${escHtml(file.mime)}</td>
+      <td title="${escHtml(file.sha256)}">${escHtml((file.sha256 || '').slice(0,16))}</td>
+      <td><a href="${escHtml(file.download_url)}" target="_blank" style="color:var(--cyan);">open</a></td>`;
+    tr.addEventListener('click', () => {
+      $('#packet-detail-card').style.display = 'block';
+      $('#packet-detail-content').textContent = JSON.stringify(file, null, 2);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function renderPcapStrings(strings) {
+  const tbody = $('#pcap-strings-tbody');
+  tbody.innerHTML = '';
+  const rows = strings?.matches?.length ? strings.matches : (strings?.items || []);
+  if(!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-dim);">No printable strings found.</td></tr>';
+    return;
+  }
+
+  rows.slice(0, 500).forEach(item => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:var(--text-dim);">${escHtml(item.index)}</td>
+      <td title="${escHtml(item.value)}">${escHtml(item.value)}</td>
+      <td><button class="string-copy-btn" type="button">COPY</button></td>`;
+    tr.querySelector('.string-copy-btn').addEventListener('click', event => {
+      event.stopPropagation();
+      copyText(item.value || '', event.currentTarget);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function renderPcapPackets(pkts) {
+  const tbody = $('#pcap-packet-tbody');
+  tbody.innerHTML = '';
+  pkts.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.className = 'packet-row';
+    tr.innerHTML = `
+      <td style="color:var(--text-dim)">${p.index}</td>
+      <td style="color:var(--text-dim);font-size:10px;">${(p.timestamp||'').slice(-12)}</td>
+      <td>${escHtml(p.src_ip)}</td>
+      <td>${escHtml(p.dst_ip)}</td>
+      <td><span style="color:var(--cyan);font-size:10px;">${escHtml(p.protocol)}</span></td>
+      <td style="color:var(--text-dim)">${p.length}</td>
+      <td><span style="color:var(--amber)">${escHtml(p.http_method)}</span></td>
+      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(p.http_uri)}">${escHtml(p.http_uri)}</td>
+      <td>${p.http_status ? statusBadge(parseInt(p.http_status)) : ''}</td>`;
+    tr.addEventListener('click', () => showPacketDetail(p));
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Fuzz table ──
+function appendFuzz(results) {
+  const tbody = $('#fuzz-tbody');
+  results.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${statusBadge(r.status)}</td>
+      <td title="${escHtml(r.url)}" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;">
+        <a href="${escHtml(r.url)}" target="_blank" style="color:var(--cyan);">${escHtml(r.url)}</a>
+      </td>
+      <td>${r.length}</td><td>${r.words}</td><td>${r.lines}</td>
+      <td style="font-size:10px;color:var(--text-dim);">${escHtml(r.content_type||'')}</td>
+      <td style="color:var(--amber);">${escHtml(r.input_word)}</td>`;
+    tbody.prepend(tr);
+  });
+  log(`gobuster: +${results.length} hits`, 'warn');
+  $('#fuzz-progress').style.width = Math.min(100, (tbody.children.length/50)*100)+'%';
+}
+
+// ── Flag cards ──
+function appendFlags(flags) {
+  const container = $('#flags-container');
+  const sidebarFlags = $('#sidebar-flags');
+  const dbList = $('#db-flag-list');
+  const empty = $('#flags-empty');
+
+  flags.forEach(f => {
+    // Main flag dashboard
+    if(empty) empty.remove();
+    const card = document.createElement('div');
+    card.className = 'flag-card';
+    card.innerHTML = `
+      <span class="flag-icon">🚩</span>
+      <div>
+        <div class="flag-text glow-amber">${escHtml(f.flag)}</div>
+        <div class="flag-meta">Source: ${escHtml(f.source)} · ${escHtml(f.timestamp)}</div>
+      </div>
+      <button class="flag-copy" onclick="navigator.clipboard.writeText('${f.flag.replace(/'/g,"\\'")}');this.textContent='✓ COPIED'">⧉ COPY</button>`;
+    container.prepend(card);
+
+    // Sidebar mini
+    const mini = document.createElement('div');
+    mini.className = 'mini-flag';
+    mini.textContent = f.flag;
+    sidebarFlags.prepend(mini);
+    const empEl = sidebarFlags.querySelector('.empty');
+    if(empEl) empEl.remove();
+
+    // Dashboard recent
+    const dItem = document.createElement('div');
+    dItem.style.cssText = 'font-family:var(--mono);font-size:12px;color:var(--amber);padding:4px 0;border-bottom:1px solid #0a0408;';
+    dItem.textContent = f.flag + ' · ' + f.source;
+    dbList.prepend(dItem);
+
+    log(`FLAG CAPTURED: ${f.flag}`, 'flag');
+  });
+}
+
+// ── Decode history ──
+function appendDecodes(decodes) {
+  const tbody = $('#decode-history-tbody');
+  decodes.forEach(d => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="color:var(--text-dim)">${escHtml(d.timestamp||'')}</td>
+      <td style="font-size:10px;">${escHtml(d.source||'manual')}</td>
+      <td style="color:var(--cyan);">${d.total_depth}</td>
+      <td>${d.flags.length > 0 ? `<span class="badge badge-200">+${d.flags.length}</span>` : '—'}</td>
+      <td title="${escHtml(d.final_output)}" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;">${escHtml(d.final_output?.slice(0,80))}</td>`;
+    tbody.prepend(tr);
+    if(tbody.children.length > 50) tbody.removeChild(tbody.lastChild);
+  });
+}
+
+// ── Manual decode ──
+async function runDecode(text, regexOverride) {
+  if(!text.trim()) return;
+  const regex = regexOverride || $('#decode-regex').value || 'flag\\{[^}]+\\}';
+  const brace_flags = $('#decode-brace-flags')?.checked || $('#cfg-brace-flags')?.checked || false;
+  const r = await fetch('/api/decode', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({text, flag_regex: regex, brace_flags}),
+  });
+  const d = await r.json();
+  renderDecodeLayers(d);
+  return d;
+}
+
+function renderDecodeLayers(d) {
+  const container = $('#decode-layers');
+  container.innerHTML = '';
+
+  if(!d.layers || d.layers.length === 0) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">✗</div>No encoding detected or single pass.</div>';
+    const final = document.createElement('div');
+    final.style.cssText = 'font-family:var(--mono);font-size:12px;color:var(--text);padding:8px;background:#030308;border:1px solid #111;margin-top:8px;';
+    final.textContent = d.final_output || d.original_preview;
+    container.appendChild(final);
+    return;
+  }
+
+  d.layers.forEach(layer => {
+    const card = document.createElement('div');
+    card.className = 'layer-card';
+    const flags = layer.flags_found?.length
+      ? layer.flags_found.map(f => `<span class="flag-inline">🚩 ${escHtml(f)}</span>`).join(' ')
+      : '';
+    card.innerHTML = `
+      <div class="layer-header">
+        <span class="layer-num">${layer.depth}</span>
+        <span class="encoding-tag">${escHtml(layer.encoding)}</span>
+        ${layer.is_meaningful ? '<span class="meaningful-tag">✓ meaningful</span>' : ''}
+        ${flags}
+      </div>
+      <div class="layer-io">
+        <div class="layer-io-block">
+          <div class="layer-io-label">INPUT</div>
+          <div class="layer-io-text">${escHtml(layer.input_preview)}</div>
+        </div>
+        <div class="layer-io-block">
+          <div class="layer-io-label">OUTPUT</div>
+          <div class="layer-io-text">${escHtml(layer.output_preview)}</div>
+        </div>
+      </div>`;
+    container.appendChild(card);
+  });
+
+  // Final output
+  const finalEl = document.createElement('div');
+  finalEl.style.cssText = 'margin-top:8px;';
+  finalEl.innerHTML = `<div class="card-title" style="font-size:10px;">FINAL OUTPUT</div>
+    <div class="packet-detail">${escHtml(d.final_output)}</div>`;
+  container.appendChild(finalEl);
+}
+
+// ── Workflow launch ──
+$('#btn-launch').addEventListener('click', async () => {
+  const target = $('#cfg-target').value.trim();
+  const flag_regex = $('#cfg-regex').value.trim();
+  const brace_flags = $('#cfg-brace-flags').checked;
+  const interface_ = $('#cfg-iface').value.trim() || 'any';
+  const duration = parseInt($('#cfg-duration').value) || 30;
+
+  if(!target) { log('Target URL is required', 'err'); return; }
+
+  $('#live-dot').classList.add('live');
+  $('#live-label').textContent = 'RUNNING';
+  log(`Launching workflow → ${target}`, 'warn');
+
+  try {
+    const r = await fetch('/api/workflow/start', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({target, flag_regex, brace_flags, interface: interface_, duration}),
+    });
+    const d = await r.json();
+    if(d.error) { log(d.error, 'err'); return; }
+    log(`Session ${d.session_id}: gobuster + tshark started`, 'ok');
+    // pre-fill fuzzer tab
+    $('#fuzz-target').value = target;
+  } catch(e) {
+    log('Workflow start failed: ' + e.message, 'err');
+  }
+});
+
+$('#btn-stop').addEventListener('click', () => {
+  $('#live-dot').classList.remove('live');
+  $('#live-label').textContent = 'STOPPED';
+  log('Workflow stopped by user', 'warn');
+});
+
+// ── Fuzzer start ──
+$('#btn-fuzz-start').addEventListener('click', async () => {
+  const target = $('#fuzz-target').value.trim() || $('#cfg-target').value.trim();
+  const wordlist = $('#fuzz-wordlist').value.trim();
+  const extensions = $('#fuzz-extensions').value.trim();
+  if(!target) { log('No target set', 'err'); return; }
+  log(`gobuster started on ${target}`, 'warn');
+  await fetch('/api/fuzz/start', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({target, wordlist, extensions}),
+  });
+  // Poll for command and display it
+  await new Promise(r => setTimeout(r, 500));
+  const statusResp = await fetch('/api/fuzz/status');
+  const statuses = await statusResp.json();
+  if(statuses.length > 0 && statuses[0].command) {
+    $('#fuzz-cmd-display').textContent = statuses[0].command;
+    $('#fuzz-cmd-card').style.display = 'block';
+  }
+});
+
+$('#btn-fuzz-copy-cmd').addEventListener('click', () => {
+  const cmd = $('#fuzz-cmd-display').textContent;
+  if(!cmd) return;
+  copyText(cmd, $('#btn-fuzz-copy-cmd'));
+});
+
+$('#btn-fuzz-clear').addEventListener('click', () => {
+  $('#fuzz-tbody').innerHTML = '';
+  $('#fuzz-progress').style.width = '0%';
+});
+
+// ── Capture start ──
+$('#btn-start-cap').addEventListener('click', async () => {
+  const iface = $('#cfg-iface').value || 'any';
+  const dur = parseInt($('#cfg-duration').value) || 30;
+  log(`tshark capture on ${iface} for ${dur}s`, 'info');
+  await fetch('/api/capture/start', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({interface: iface, duration: dur}),
+  });
+});
+
+$('#btn-clear-pkts').addEventListener('click', () => {
+  $('#packet-tbody').innerHTML = '';
+  $('#packet-detail-card').style.display = 'none';
+});
+
+// ── PCAP analyzer ──
+$('#btn-pcap-analyze').addEventListener('click', async () => {
+  const file = $('#pcap-file').files[0];
+  const filter = $('#pcap-filter').value.trim();
+  const stringQuery = $('#pcap-string-query').value.trim();
+  const flagRegex = $('#cfg-regex').value.trim();
+  const braceFlags = $('#cfg-brace-flags').checked;
+  if(!file) {
+    log('Choose a PCAP file first', 'err');
+    return;
+  }
+
+  const form = new FormData();
+  form.append('pcap', file);
+  form.append('filter', filter);
+  form.append('string_query', stringQuery);
+  form.append('flag_regex', flagRegex);
+  form.append('brace_flags', braceFlags ? '1' : '0');
+
+  $('#btn-pcap-analyze').disabled = true;
+  $('#pcap-summary').innerHTML = '<div class="empty"><div class="empty-icon">◫</div>Analyzing capture...</div>';
+  log(`PCAP analysis started: ${file.name}`, 'warn');
+
+  try {
+    const resp = await fetch('/api/pcap/analyze', {method:'POST', body: form});
+    const payload = await resp.json();
+    if(!resp.ok) {
+      throw new Error(payload.error || 'pcap analysis failed');
+    }
+    renderPcapSummary(payload);
+    renderPcapFiles(payload.extracted_files || []);
+    renderPcapStrings(payload.strings || {});
+    renderPcapPackets(payload.packets || []);
+    log(`PCAP analysis complete: ${payload.summary?.packet_count || 0} packets`, 'ok');
+    refreshStats();
+  } catch(e) {
+    $('#pcap-summary').innerHTML = `<div class="empty"><div class="empty-icon">✗</div>${escHtml(e.message)}</div>`;
+    log('PCAP analysis failed: ' + e.message, 'err');
+  } finally {
+    $('#btn-pcap-analyze').disabled = false;
+  }
+});
+
+// ── Decoder ──
+$('#btn-decode').addEventListener('click', () => {
+  runDecode($('#decode-input').value);
+});
+
+$('#btn-decode-clear').addEventListener('click', () => {
+  $('#decode-input').value = '';
+  $('#decode-layers').innerHTML = '<div class="empty"><div class="empty-icon">⟳</div>Waiting for input…</div>';
+});
+
+// ── Quick decode (sidebar) ──
+$('#btn-quick-decode').addEventListener('click', async () => {
+  const text = $('#quick-decode-in').value.trim();
+  if(!text) return;
+  const d = await runDecode(text);
+  if(d) {
+    $('#quick-decode-out').textContent = d.final_output?.slice(0,200) || 'No change';
+  }
+});
+
+// ── Flags clear ──
+$('#btn-clear-flags').addEventListener('click', async () => {
+  await fetch('/api/flags/clear', {method:'POST'});
+  $('#flags-container').innerHTML = '<div class="empty" id="flags-empty"><div class="empty-icon">🏴</div>No flags captured yet.</div>';
+  $('#sidebar-flags').innerHTML = '<div class="empty" style="padding:20px;"><div class="empty-icon">🏴</div>No flags yet</div>';
+  $('#db-flag-list').innerHTML = '';
+});
+
+// ── Request editor ──
+$('#btn-send-req').addEventListener('click', async () => {
+  const method = $('#req-method').value;
+  const url = $('#req-url').value.trim();
+  const rawHeaders = $('#req-headers').value.trim();
+  const body = $('#req-body').value.trim();
+  if(!url) return;
+
+  const headers = {};
+  rawHeaders.split('\n').forEach(line => {
+    const idx = line.indexOf(':');
+    if(idx > 0) headers[line.slice(0,idx).trim()] = line.slice(idx+1).trim();
+  });
+
+  // Display what was sent
+  let reqDataText = `${method} ${url}\n\n`;
+  if(Object.keys(headers).length > 0) {
+    reqDataText += `Headers:\n`;
+    Object.entries(headers).forEach(([k, v]) => {
+      reqDataText += `  ${k}: ${v}\n`;
+    });
+  }
+  if(body) {
+    reqDataText += `\nBody:\n${body}`;
+  }
+  $('#req-data-display').textContent = reqDataText || 'No data';
+  $('#req-data-display').style.color = 'var(--cyan)';
+
+  const t0 = Date.now();
+  try {
+    const resp = await fetch('/api/request', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({method, url, headers, body}),
+    });
+    const elapsed = Date.now() - t0;
+    const payload = await resp.json();
+    if(!resp.ok) {
+      throw new Error(payload.error || 'request failed');
+    }
+
+    const status = payload.status;
+    const badge = $('#res-status');
+    badge.textContent = status;
+    badge.className = 'badge badge-' + (status===200?'200':status>=300&&status<400?'301':status>=400&&status<500?'403':'500');
+    $('#res-time').textContent = `${payload.elapsed_ms ?? elapsed}ms`;
+
+    let hdrText = '';
+    Object.entries(payload.headers || {}).forEach(([k, v]) => { hdrText += `${k}: ${v}\n`; });
+    $('#res-headers').value = hdrText;
+    $('#res-body').value = payload.body || '';
+    $('#res-cmd').value = payload.command || 'curl command not captured';
+
+    log(`${method} ${url} → ${status} (${elapsed}ms)`, status < 400 ? 'ok' : 'warn');
+  } catch(e) {
+    log('Request failed: ' + e.message, 'err');
+    $('#res-cmd').value = 'Error: ' + e.message;
+    $('#res-body').value = 'Error: ' + e.message;
+  }
+});
+
+$('#btn-decode-res').addEventListener('click', () => {
+  const body = $('#res-body').value;
+  if(!body) return;
+  $('#decode-input').value = body;
+  $$('.tab').forEach(t => t.classList.remove('active'));
+  $$('.tab-panel').forEach(p => p.classList.remove('active'));
+  $('[data-tab="decoder"]').classList.add('active');
+  $('#tab-decoder').classList.add('active');
+  runDecode(body);
+});
+
+// ── Init ──
+startSSE();
+setInterval(refreshStats, 2000);
+refreshStats();
+log('CTF Demon frontend loaded. All systems nominal.', 'ok');
+</script>
+</body>
+</html>
